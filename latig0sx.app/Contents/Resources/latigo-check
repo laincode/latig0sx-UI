@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (c) 2012/2015 lain <lain@braincakes.org>
+# Copyright (c) 2014/2016 lain <lain@braincakes.org>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,12 +38,19 @@ read user
 
 clear
 
-echo -------------------------------------------
-echo " Latigo - OS X Auditing                  "
-echo "     by lain                             "
-echo -------------------------------------------
+echo ---------------------------------------
+echo "   Latig0sx v2.0 - OS X Auditing     "
+echo "       by lain                       "
+echo ---------------------------------------
 
-inuser=$user
+inuser=$user 
+
+## Check if user input exists
+if [ ! -d /Users/$inuser ] 
+then
+	echo "\n Error - User $inuser doesn't exist. Enter a valid user.\n "
+	exit 1
+fi
 
 ## Configuration Overview ##
 echo "\n[[Configuration Overview]]"
@@ -168,28 +175,48 @@ for u in $users
 do
 	blimit=$(quota -v $u | grep / | awk '{ print $4 }')
 	inodelimit=$(quota -v $u | grep / | awk '{ print $7 }')  
-    if [ -z $blimit ]
-    then
-        blimit=0
-    fi
-    if [ -z $inodelimit ]
-    then
-        inodelimit=0
-    fi
+        if [ -z $blimit ]
+        then
+        	blimit=0
+        fi
+        if [ -z $inodelimit ]
+        then
+                inodelimit=0
+        fi
 	echo "\t \t User: $u - Block limit: $blimit - File limit: $inodelimit"
 	if [ $blimit -eq 0 ] && [ $inodelimit -eq 0 ]
 	then
 		echo "\t \t Must set disk quota for user $u [ \033[00;31mWarning\033[0m ]"
 	fi
 	if [ $blimit -eq 0 ] && [ $inodelimit -ne 0 ]
-    then
-        echo "\t \t Must set Block limit for user $u [ \033[00;31mWarning\033[0m ]"
-    fi
-    if [ $blimit -ne 0 ] && [ $inodelimit -eq 0 ]
-    then
-        echo "\t \t Must set File limit for user $u [ \033[00;31mWarning\033[0m ]"
-    fi
+        then
+                echo "\t \t Must set Block limit for user $u [ \033[00;31mWarning\033[0m ]"
+        fi 
+        if [ $blimit -ne 0 ] && [ $inodelimit -eq 0 ]
+        then
+                echo "\t \t Must set File limit for user $u [ \033[00;31mWarning\033[0m ]"
+        fi
 done
+
+# Checking the sudo timeout period
+echo "\t [Checking sudo timeout period]"
+stimep=$(sudo cat /etc/sudoers | grep timestamp | awk '{ print $2 $3 $4 $5}')
+if [ ! -z $stimep ]
+then
+        echo "\t \t Sudo timeout period is set to $stimep"
+else
+	echo "\t \t No sudo timeout period setting [ \033[00;31mWarning\033[0m ]"
+fi 
+
+# Checking core dumps
+echo "\t [Checking core dumps]"
+cdump=$(launchctl limit core | awk '{ print $3 }')
+if [ $cdump == "0" ]
+then
+        echo "\t \t Core dumps disabled"
+else
+        echo "\t \t Core dumps enabled: $cdump [ \033[00;31mWarning\033[0m ]"
+fi
 
 ## Checking Global System Settings ##
 echo "\n[[Checking Global System Settings]]"
@@ -254,12 +281,12 @@ if [ "$(echo $secaudit)" ]
 then
         if [ "$(echo $secaudit | awk ' { print $1 } ')" == "-" ]
         then 
-            echo "\t \t Security Audit daemon loaded but not running [ \033[00;31mWarning\033[0m ]"
+                echo "\t \t Security Audit daemon loaded but not running [ \033[00;31mWarning\033[0m ]"
         else
-            echo "\t \t Security Audit daemon is running"
+                echo "\t \t Security Audit daemon is running"
         fi
 else
-    echo "\t \t Security Audit daemon unloaded [ \033[00;31mWarning\033[0m ]"
+        echo "\t \t Security Audit daemon unloaded [ \033[00;31mWarning\033[0m ]"
 fi
 
 ## Checking System Preferences ##
@@ -267,22 +294,31 @@ echo "\n[[Checking System Preferences]]"
 	
 # Checking MobileMe Preferences
 echo "\t [Checking MobileMe Preferences]"
+mobileme=$(defaults read ~/Library/Preferences/.GlobalPreferences iToolsMember 2>&1)
+if [ "$(echo $mobileme | awk '/does not exist/')" ]
+then
+	echo "\t \t MobileMe Preferences disabled"
+else
+	echo "\t \t MobileMe Preferences enabled [ \033[00;31mWarning\033[0m ]"
+fi
+
 # Checking Disable Sync options
+echo "\t [Checking Sync optins disabled]"
 syncopts=$(defaults read /Library/Preferences/com.apple.DotMacSync ShouldSyncWithServer 2>&1)
 if [ "$(echo $syncopts | awk '/does not exist/')" ]
 then
-    echo "\t \t Sync options not installed"
+        echo "\t \t Sync options not installed"
 else
 	if [ $syncopts -eq -1 ]
-    then
+        then
 		echo "\t \t Sync options disabled"
 	else
 		echo "\t \t Sync options enabled [ \033[00;31mWarning\033[0m ]"
 		#Checking Disable iDisk Syncing
-        echo "\t \t [Checking Disable iDisk Syncing]"
-        echo "\t \t Enter your MobileMe user name:"
-        read mirroruser
-        idisksync=$(defaults -currentHost read com.apple.idisk $mirroruser 2>&1)
+                echo "\t \t [Checking Disable iDisk Syncing]"
+                echo "\t \t Enter your MobileMe user name:"
+                read mirroruser
+                idisksync=$(defaults -currentHost read com.apple.idisk $mirroruser 2>&1)
 		if [ "$(echo $idisksync | awk '/does not exist/')" ]
 		then
 			echo "\t \t iDisk Syncing not installed"
@@ -294,7 +330,7 @@ else
 				echo "\t \t iDisk Syncing disabled"
 			fi
 		fi
-    fi
+        fi
 fi
 
 # Checking Accounts Preferences
@@ -341,6 +377,20 @@ else
 		echo "\t \t Show Restart, Sleep and ShutDown Buttons disabled"
 	fi
 fi
+
+# Checking Allow guests to connect to shared folders
+guestshare=$(defaults read /Library/Preferences/com.apple.AppleFileServer guestAccess 2>&1)
+if [ "$(echo $guestshare | awk '/does not exist/')" ]
+then
+        echo "\t \t Allow guests to connect to shared folders not installed"
+else
+        if [ $guestshare -eq 0 ]
+        then
+                echo "\t \t Allow guests to connect to shared folders disabled"
+        else
+                echo "\t \t Allow guests to connect to shared folders enabled [ \033[00;31mWarning\033[0m ]"
+        fi
+fi
  
 # Checking fast user switching disabled
 fastUserSwitching=$(defaults read /Library/Preferences/.GlobalPreferences MultipleSessionEnabled 2>&1)
@@ -386,6 +436,20 @@ else
 	fi
 fi
 
+# Checking Bluetooth internet connection sharing
+blueshare=$(defaults read /Library/Preferences/com.apple.Bluetooth PANServices 2>&1)
+if [ "$(echo $blueshare | awk '/does not exist/')" ]
+then
+        echo "\t \t Bluetooth internet connection sharing not installed"
+else
+	if [ $blueshare -eq 0 ]
+        then
+                echo "\t \t Bluetooth internet connection sharing is disabled"
+        else
+                echo "\t \t Bluetooth internet connection sharing is enabled [ \033[00;31mWarning\033[0m ]"
+        fi
+fi
+
 # Checking CDs & DVDs Preferences 
 echo "\t [Checking CDs & DVDs Preferences]"
 
@@ -425,9 +489,9 @@ then
 else
 	if [ "$(echo $cdPrefPicture | grep "action = 1")" ]
 	then
-        echo "\t \t Picture CD automatic action disabled"
+        	echo "\t \t Picture CD automatic action disabled"
 	else
-        echo "\t \t Picture CD automatic action enabled [ \033[00;31mWarning\033[0m ]"
+        	echo "\t \t Picture CD automatic action enabled [ \033[00;31mWarning\033[0m ]"
 	fi
 fi
 
@@ -435,13 +499,13 @@ fi
 dvdPrefBlank=$(defaults read /Users/$inuser/Library/Preferences/com.apple.digihub com.apple.digihub.blank.dvd.appeared action 2>&1)
 if [ "$(echo $dvdPrefBlank | awk '/does not exist/')" ]
 then
-    echo "\t \t Blank CD automatic action not defined"
+        echo "\t \t Blank CD automatic action not defined"
 else
 	if [ "$(echo $dvdPrefBlank | grep "action = 1")" ]
 	then
-        echo "\t \t Blank DVD automatic action disabled"
+        	echo "\t \t Blank DVD automatic action disabled"
 	else
-        echo "\t \t Blank DVD automatic action enabled [ \033[00;31mWarning\033[0m ]"
+        	echo "\t \t Blank DVD automatic action enabled [ \033[00;31mWarning\033[0m ]"
 	fi
 fi
 
@@ -449,12 +513,12 @@ fi
 dvdPrefVideo=$(defaults read /Users/$inuser/Library/Preferences/com.apple.digihub com.apple.digihub.dvd.video.appeared action 2>&1)
 if [ "$(echo $cdPrefVideo | awk '/does not exist/')" ]
 then
-    echo "\t \t Video CD automatic action not defined"
-    if [ "$(echo $dvdPrefVideo | grep "action = 1")" ]
+        echo "\t \t Video CD automatic action not defined"
+	if [ "$(echo $dvdPrefVideo | grep "action = 1")" ]
 	then 
-        echo "\t \t Video DVD automatic action disabled"
+        	echo "\t \t Video DVD automatic action disabled"
 	else
-        echo "\t \t Video DVD automatic action enabled [ \033[00;31mWarning\033[0m ]"
+        	echo "\t \t Video DVD automatic action enabled [ \033[00;31mWarning\033[0m ]"
 	fi
 fi
 
@@ -499,7 +563,12 @@ if [ "$(echo $idleTimeScreenSaver | awk '/does not exist/')" ]
 then
 	echo "\t \t Idle time for screen saver not setting [ \033[00;31mWarning\033[0m ]"
 else
-	echo "\t \t Idle time for screen saver setting"
+	if [ $idleTime -lt 900 ]
+	then
+		echo "\t \t Idle time for screen saver is setting to $idleTime"
+	else
+		echo "\t \t Idle time for screen saver is not set to a value lower than 900  [ \033[00;31mWarning\033[0m ]"
+        fi
 fi
 
 # Set host corner to activate screen saver
@@ -509,11 +578,11 @@ then
 	echo "\t \t Host corner to activate screen saver not setting"
 else    
 	if [ $hostcornerScreenSave -eq 5 ]
-    then
-        echo "\t \t Host corner to activate screen saver setting and value 5"
-    else
-        echo "\t \t Host corner to activate screen saver setting but not value 5[ \033[00;31mWarning\033[0m ]"
-    fi
+    	then
+        	echo "\t \t Host corner to activate screen saver setting and value 5"
+    	else
+        	echo "\t \t Host corner to activate screen saver setting but not value 5[ \033[00;31mWarning\033[0m ]"
+    	fi
 fi
 
 # Set modifier key to 0 wvous-corner_code-modifier 
@@ -522,12 +591,12 @@ if [ "$(echo $modifierKey | awk '/does not exist/')" ]
 then 
 	echo "\t \t Modifier key to 0 wvous-corner_code-modifier not setting [ \033[00;31mWarning\033[0m ]"
 else
-    if [ $modifierKey -eq 0 ]
-    then
-        echo "\t \t Modifier key to 0 wvous-corner_code-modifier setting"
-    else
-        echo "\t \t Modifier key wvous-corner_code-modifier must be setting 0 [ \033[00;31mWarning\033[0m ]"
-    fi
+    	if [ $modifierKey -eq 0 ]
+    	then
+        	echo "\t \t Modifier key to 0 wvous-corner_code-modifier setting"
+    	else
+        	echo "\t \t Modifier key wvous-corner_code-modifier must be setting 0 [ \033[00;31mWarning\033[0m ]"
+    	fi
 fi
 
 # Automatically hide and show Dock
@@ -536,12 +605,12 @@ if [ "$(echo $autoDock | awk '/does not exist/')" ]
 then 
 	echo "\t \t Automatically hide and show Dock not setting"
 else 
-    if [ "$autoDock" == "YES" ]
-    then
-        echo "\t \t Automatically hide and show Dock setting"
-    else
-        echo "\t \t Automatically hide and show Dock not setting [ \033[00;31mWarning\033[0m ]"
-    fi
+    	if [ "$autoDock" == "YES" ]
+    	then
+        	echo "\t \t Automatically hide and show Dock setting"
+    	else
+        	echo "\t \t Automatically hide and show Dock not setting [ \033[00;31mWarning\033[0m ]"
+    	fi
 fi
 
 # Checking Computer Sleep disabled
@@ -592,9 +661,9 @@ if [ "$(echo $restartAuto)" ]
 then
 	if [ $restartAuto -eq 0 ]
 	then
-        echo "\t \t Restart automatically after power failure disabled"
+        	echo "\t \t Restart automatically after power failure disabled"
 	else
-        echo "\t \t Restart automatically after power failure enabled [ \033[00;31mWarning\033[0m ]"
+        	echo "\t \t Restart automatically after power failure enabled [ \033[00;31mWarning\033[0m ]"
 	fi
 else
 	echo "\t \t Restart automatically after power failure not setting"
@@ -648,11 +717,11 @@ askForPassword=$(defaults read /Users/$inuser/Library/Preferences/com.apple.scre
 if [ -z "$(echo $askForPassword | awk '/does not exist/')" ]
 then
 	if [ $askForPassword -eq 1 ]
-    then
-        echo "\t \t Require password to wake this computer from sleep or screen saver enabled"
-    else
-        echo "\t \t Require password to wake this computer from sleep or screen saver disabled [ \033[00;31mWarning\033[0m ]"
-    fi
+    	then 
+        	echo "\t \t Require password to wake this computer from sleep or screen saver enabled"
+    	else
+        	echo "\t \t Require password to wake this computer from sleep or screen saver disabled [ \033[00;31mWarning\033[0m ]"
+    	fi
 else
 	echo "\t \t Require password to wake this computer from sleep or screen saver not setting [ \033[00;31mWarning\033[0m ]"
 fi
@@ -730,7 +799,7 @@ else
 	if [ "$(echo $fwverb)" == 1 ]
 	then	
 		echo "\t \t Firewall (IPFW) logging is enabled"
-        echo "\t \t Recomendation: set verbose to value 2 [ \033[00;31mWarning\033[0m ]"
+        	echo "\t \t Recomendation: set verbose to value 2 [ \033[00;31mWarning\033[0m ]"	
 	else
 		echo "\t \t Firewall (IPFW) logging is disabled [ \033[00;31mWarning\033[0m ]"
 	fi
@@ -743,7 +812,7 @@ then
 	echo "\t \t Firewall Logging not setting [ \033[00;31mWarning\033[0m ]"
 else
 	if [ $appfwverb == 1 ]
-    then
+        then
 		echo "\t \t Application Firewall Logging Enabled"
 	else
 		echo "\t \t Application Firewall Logging Disabled [ \033[00;31mWarning\033[0m ]"
@@ -757,9 +826,9 @@ then
 	echo "\t \t Secure virtual memory not setting [ \033[00;31mWarning\033[0m ]"
 else
 	if [ $secureVirtualMemory == "YES" ]
-    then
+    	then
 		echo "\t \t Secure virtual memory enabled"
-    else
+    	else
 		echo "\t \t Secure virtual memory disabled [ \033[00;31mWarning\033[0m ]"
 	fi
 fi
@@ -787,10 +856,10 @@ then
 	echo "\t \t Speed Recognition not setting"
 else
 	if [ $speedRecognition == "false" ]
-    then
-        echo "\t \t Speed Recognition disabled"
-    else
-        echo "\t \t Speed Recognition enabled [ \033[00;31mWarning\033[0m ]"
+    	then
+        	echo "\t \t Speed Recognition disabled"
+    	else
+        	echo "\t \t Speed Recognition enabled [ \033[00;31mWarning\033[0m ]"
    	fi
 fi
 
@@ -800,7 +869,7 @@ if [ "$(echo $talkingAlertsSpeak | awk '/does not exist/')" ]
 then
 	echo "\t \t Text to Speech settings not setting"
 else 
-    if [ $talkingAlertsSpeak == "false" ]
+    	if [ $talkingAlertsSpeak == "false" ]
 	then
 		echo "\t \t Text to Speech settings disabled"
 	else
@@ -1062,6 +1131,8 @@ services=(
 # If a VPN is not used, disable the IKE VPN key management service
 com.apple.racoon
 # Disable Bonjour!!!
+com.apple.mDNSResponder
+com.apple.mDNSResponderHelper
 # Disable DVD or CD Sharing
 com.apple.ODSAgent
 # Disable FTP
@@ -1074,6 +1145,7 @@ com.apple.smb.sharepoints
 com.apple.smbfs_load_kext
 org.samba.winbindd
 # Disable AFP
+com.apple.AppleFileServer
 com.apple.afpfs_afpLoad
 com.apple.afpfs_checkafp
 # Disable NFS
@@ -1095,7 +1167,7 @@ com.apple.eppc
 com.apple.xgridagentd
 com.apple.xgridcontrollerd
 # Disable Internet Sharing
-com.apple.InternetSharin
+com.apple.InternetSharing
 # Turn off AirPort Services using the following commands
 com.apple.airportPrefsUpdater
 com.apple.AirPort.wps
@@ -1117,7 +1189,8 @@ com.apple.blued
 com.apple.IIDCAssistant
 com.apple.UserNotificationCenter
 com.apple.webdavfs_load_kext
-org.postfix.master )
+org.postfix.master
+eppc )
 for s in ${services[@]} 
 do
 	(launchctl list | grep "$s" 1>/dev/null) && echo "\t \t Service $s must be unloaded [ \033[00;31mWarning\033[0m ]"
